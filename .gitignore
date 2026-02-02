@@ -1,1 +1,13 @@
 notes.md
+openclaw/
+
+# Python
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
