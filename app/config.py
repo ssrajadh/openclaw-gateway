@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     openclaw_worker_url: str = "http://127.0.0.1:18789"
     openclaw_worker_token: str = ""
     port: int = 8000
+    database_url: str = "postgresql+asyncpg://gateway:gateway@localhost:5432/gateway"
 
     @field_validator("openclaw_worker_token", mode="before")
     @classmethod

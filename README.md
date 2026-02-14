@@ -10,7 +10,6 @@ It acts as a **Model Context Protocol (MCP) Proxy**, intercepting every action a
 ## Key Features
 - **Real-time Audit Logging:** Every shell command, API call, and file access is logged to a persistent PostgreSQL store.
 - **Command Guardrails:** Prevent destructive actions (e.g., `rm -rf /`, `curl | bash`) via regex and LLM-based vetting.
-- **RBAC for Agents:** Assign "Least Privilege" scopes to your agents (e.g., "Can read JIRA, cannot write to Production Terminal").
 - **Human-in-the-Loop (HITL):** Pause high-risk actions and require manual approval via WhatsApp or a secure Web Dashboard.
 - **MCP Native:** Plugs into the existing 100+ OpenClaw skills ecosystem with zero configuration.
 
@@ -43,8 +42,15 @@ It acts as a **Model Context Protocol (MCP) Proxy**, intercepting every action a
 4. **Endpoints:**
    - `GET /health` — Health check.
    - `POST /execute` — Run a task. Body: `{"prompt": "list my sessions", "user_id": null}`. Response: `{"status": "success"|"error"|"pending_approval", "output": ...}`.
+   - `GET /audit` — Forensic retrieval of audit logs. Query: `?status=ALLOWED` or `?status=PENDING` to filter.
 
-5. **Tests:**
+5. **Docker (FastAPI + PostgreSQL):**
+   ```bash
+   docker compose up -d
+   ```
+   Requires `DATABASE_URL` (set automatically by docker-compose). Ensure PostgreSQL is up before the gateway starts.
+
+6. **Tests:**
    ```bash
    pytest
    ```

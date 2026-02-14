@@ -1,15 +1,16 @@
-"""FastAPI app: /health and /execute."""
+"""FastAPI app: /health, /execute, and /audit."""
 
 import logging
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 
 logger = logging.getLogger(__name__)
 from pydantic import BaseModel
 
+from app.audit.service import list_audit_logs
 from app.graph.graph import get_execution_graph
 
 app = FastAPI(title="OpenClaw Gateway", version="0.1.0")
@@ -29,6 +30,22 @@ class ExecuteResponse(BaseModel):
 async def health():
     """Health check. Optionally check worker reachability later."""
     return {"status": "ok"}
+
+
+@app.get("/audit")
+async def get_audit(
+    status: str | None = Query(None, description="Filter by security_status (e.g. ALLOWED, PENDING)"),
+):
+    """
+    Forensic retrieval: list audit log entries, optionally filtered by status.
+    Example: GET /audit?status=ALLOWED
+    """
+    try:
+        records = await list_audit_logs(status=status)
+        return {"records": records}
+    except Exception as e:
+        logger.exception("Audit retrieval failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/execute", response_model=ExecuteResponse)

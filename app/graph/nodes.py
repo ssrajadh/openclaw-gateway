@@ -1,18 +1,10 @@
-"""LangGraph nodes: plan step and execute step (RBAC + worker)."""
+"""LangGraph nodes: plan step and execute step (audit + worker)."""
 
-from app import rbac
-from app.worker_client import invoke_tool, WorkerInvokeError
+from app.audit.service import create_pending_record, update_record
+from app.worker_client import WorkerInvokeError, invoke_tool
 
 # Type alias for graph state
 GraphState = dict
-
-
-def requires_approval(user_id: str | None, tool: str, args: dict) -> bool:
-    """
-    True if this step requires human-in-the-loop approval before execution.
-    Step 2: always False. Step 4 will integrate Slack/WhatsApp and pause/resume here.
-    """
-    return False
 
 
 async def plan_node(state: GraphState) -> GraphState:
@@ -58,13 +50,12 @@ async def plan_node(state: GraphState) -> GraphState:
 
 async def execute_node(state: GraphState) -> GraphState:
     """
-    Execute node: for current step, check RBAC and requires_approval, then call worker.
-    Short-circuit on deny or error.
+    Execute node: Phase A log (PENDING) -> invoke worker -> Phase B log (ALLOWED).
     """
     steps = state.get("steps") or []
     current_index = state.get("current_index", 0)
     results = list(state.get("results") or [])
-    user_id = state.get("user_id")
+    actor_id = state.get("user_id")
 
     if current_index >= len(steps):
         return {**state, "done": True, "results": results}
@@ -81,28 +72,25 @@ async def execute_node(state: GraphState) -> GraphState:
             "error": "Step missing tool",
         }
 
-    if not rbac.is_tool_allowed(user_id, tool):
-        return {
-            **state,
-            "done": True,
-            "results": results,
-            "error": f"RBAC: user not allowed to run tool {tool!r}",
-        }
-
-    if requires_approval(user_id, tool, args):
-        return {
-            **state,
-            "done": True,
-            "results": results,
-            "error": None,
-            "pending_approval": True,
-        }
+    # Phase A: Insert PENDING audit record
+    audit_id = await create_pending_record(actor_id=actor_id, tool_call=tool, raw_input=args)
 
     try:
         out = await invoke_tool(tool, args)
         results.append({"tool": tool, "ok": True, "result": out.get("result")})
+        # Phase B: Update with ALLOWED + execution result
+        await update_record(
+            audit_id=audit_id,
+            security_status="ALLOWED",
+            execution_result={"ok": True, "result": out.get("result")},
+        )
     except WorkerInvokeError as e:
         results.append({"tool": tool, "ok": False, "error": e.message})
+        await update_record(
+            audit_id=audit_id,
+            security_status="ALLOWED",
+            execution_result={"ok": False, "error": e.message},
+        )
         return {
             **state,
             "done": True,
@@ -112,6 +100,11 @@ async def execute_node(state: GraphState) -> GraphState:
     except Exception as e:
         msg = str(e)
         results.append({"tool": tool, "ok": False, "error": msg})
+        await update_record(
+            audit_id=audit_id,
+            security_status="ALLOWED",
+            execution_result={"ok": False, "error": msg},
+        )
         return {
             **state,
             "done": True,
