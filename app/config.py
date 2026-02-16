@@ -13,10 +13,12 @@ class Settings(BaseSettings):
 
     openclaw_worker_url: str = "http://127.0.0.1:18789"
     openclaw_worker_token: str = ""
+    openai_api_key: str = ""
+    tavily_api_key: str = ""
     port: int = 8000
     database_url: str = "postgresql+asyncpg://gateway:gateway@localhost:5432/gateway"
 
-    @field_validator("openclaw_worker_token", mode="before")
+    @field_validator("openclaw_worker_token", "openai_api_key", "tavily_api_key", mode="before")
     @classmethod
     def strip_token(cls, v: str) -> str:
         return (v or "").strip()
