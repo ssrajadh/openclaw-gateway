@@ -68,31 +68,41 @@ async def update_record(
         )
 
 
-async def list_audit_logs(status: str | None = None) -> list[dict[str, Any]]:
+async def list_audit_logs(
+    status: str | None = None, 
+    actor_id: str | None = None,
+    limit: int = 100
+) -> list[dict[str, Any]]:
     """
-    Retrieve audit records, optionally filtered by security_status.
+    Retrieve audit records, optionally filtered by security_status and/or actor_id.
     """
     async with get_session() as session:
+        conditions = []
+        params = {}
+        
         if status:
-            result = await session.execute(
-                text("""
-                    SELECT id, timestamp, actor_id, tool_call, raw_input,
-                           security_status, execution_result, created_at, updated_at
-                    FROM audit_logs
-                    WHERE security_status = :status
-                    ORDER BY timestamp DESC
-                """),
-                {"status": status},
-            )
-        else:
-            result = await session.execute(
-                text("""
-                    SELECT id, timestamp, actor_id, tool_call, raw_input,
-                           security_status, execution_result, created_at, updated_at
-                    FROM audit_logs
-                    ORDER BY timestamp DESC
-                """),
-            )
+            conditions.append("security_status = :status")
+            params["status"] = status
+        
+        if actor_id:
+            conditions.append("actor_id = :actor_id")
+            params["actor_id"] = actor_id
+        
+        where_clause = ""
+        if conditions:
+            where_clause = "WHERE " + " AND ".join(conditions)
+        
+        query = f"""
+            SELECT id, timestamp, actor_id, tool_call, raw_input,
+                   security_status, execution_result, created_at, updated_at
+            FROM audit_logs
+            {where_clause}
+            ORDER BY timestamp DESC
+            LIMIT :limit
+        """
+        params["limit"] = limit
+        
+        result = await session.execute(text(query), params)
         rows = result.fetchall()
         return [
             {

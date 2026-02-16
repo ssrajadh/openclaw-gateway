@@ -35,16 +35,69 @@ async def health():
 @app.get("/audit")
 async def get_audit(
     status: str | None = Query(None, description="Filter by security_status (e.g. ALLOWED, PENDING)"),
+    actor_id: str | None = Query(None, description="Filter by actor_id"),
+    limit: int = Query(10, description="Number of records to return"),
 ):
     """
     Forensic retrieval: list audit log entries, optionally filtered by status.
-    Example: GET /audit?status=ALLOWED
+    Example: GET /audit?status=ALLOWED&limit=5
     """
     try:
-        records = await list_audit_logs(status=status)
+        records = await list_audit_logs(status=status, actor_id=actor_id, limit=limit)
         return {"records": records}
     except Exception as e:
         logger.exception("Audit retrieval failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/audit/pretty")
+async def get_audit_pretty(
+    actor_id: str | None = Query(None, description="Filter by actor_id"),
+    limit: int = Query(10, description="Number of records to return"),
+):
+    """Get audit logs in a pretty, human-readable format"""
+    try:
+        logs = await list_audit_logs(actor_id=actor_id, limit=limit)
+        
+        if not logs:
+            return {"message": "No audit logs found"}
+        
+        output = []
+        output.append("=" * 120)
+        output.append(f"{'ID':<5} {'USER':<15} {'TOOL':<25} {'STATUS':<12} {'RESULT':<10} {'TIME':<25}")
+        output.append("=" * 120)
+        
+        for log in logs:
+            result_str = "✓ OK" if log.get("execution_result") and log["execution_result"].get("ok") else "✗ FAIL"
+            time_str = log["created_at"][:19] if log.get("created_at") else "N/A"
+            
+            output.append(
+                f"{log['id']:<5} {log['actor_id']:<15} {log['tool_call']:<25} "
+                f"{log['security_status']:<12} {result_str:<10} {time_str:<25}"
+            )
+            
+            # Show input details
+            if log.get("raw_input"):
+                input_str = str(log["raw_input"])
+                if len(input_str) > 80:
+                    input_str = input_str[:77] + "..."
+                output.append(f"      Input: {input_str}")
+            
+            # Show error details for failures
+            if log.get("execution_result") and not log["execution_result"].get("ok"):
+                error = log["execution_result"].get("error", "Unknown error")
+                if len(error) > 80:
+                    error = error[:77] + "..."
+                output.append(f"      Error: {error}")
+            
+            output.append("-" * 120)
+        
+        output.append(f"\nTotal records: {len(logs)}")
+        output.append("=" * 120)
+        
+        return {"formatted_logs": "\n".join(output)}
+    except Exception as e:
+        logger.exception("Pretty audit retrieval failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 
