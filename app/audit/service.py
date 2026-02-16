@@ -25,7 +25,7 @@ async def create_pending_record(
                     security_status, created_at
                 )
                 VALUES (
-                    :timestamp, :actor_id, :tool_call, :raw_input::jsonb,
+                    :timestamp, :actor_id, :tool_call, CAST(:raw_input AS jsonb),
                     'PENDING', :created_at
                 )
                 RETURNING id
@@ -55,7 +55,7 @@ async def update_record(
             text("""
                 UPDATE audit_logs
                 SET security_status = :security_status,
-                    execution_result = :execution_result::jsonb,
+                    execution_result = CAST(:execution_result AS jsonb),
                     updated_at = :updated_at
                 WHERE id = :audit_id
             """),
